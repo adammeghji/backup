@@ -2,8 +2,10 @@
 
 module Backup
   module Packager
+    class Error < Backup::Error; end
+
     class << self
-      include Backup::CLI::Helpers
+      include Backup::Utilities::Helpers
 
       ##
       # Build the final package for the backup model.
@@ -13,14 +15,13 @@ module Backup
         @splitter  = model.splitter
         @pipeline  = Pipeline.new
 
-        Logger.message "Packaging the backup files..."
+        Logger.info "Packaging the backup files..."
         procedure.call
 
         if @pipeline.success?
-          Logger.message "Packaging Complete!"
+          Logger.info "Packaging Complete!"
         else
-          raise Errors::Packager::PipelineError,
-              "Failed to Create Backup Package\n" +
+          raise Error, "Failed to Create Backup Package\n" +
               @pipeline.error_messages
         end
       end
@@ -81,7 +82,7 @@ module Backup
         else
           stack << lambda do
             outfile = File.join(Config.tmp_path, @package.basename)
-            @pipeline << "cat > #{ outfile }"
+            @pipeline << "#{ utility(:cat) } > #{ outfile }"
             stack.shift.call
           end
         end

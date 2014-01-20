@@ -2,12 +2,15 @@
 
 module Backup
   class Pipeline
-    include Backup::CLI::Helpers
+    class Error < Backup::Error; end
+
+    include Backup::Utilities::Helpers
 
     attr_reader :stderr, :errors
 
     def initialize
       @commands = []
+      @success_codes = []
       @errors = []
       @stderr = ''
     end
@@ -16,8 +19,21 @@ module Backup
     # Adds a command to be executed in the pipeline.
     # Each command will be run in the order in which it was added,
     # with it's output being piped to the next command.
-    def <<(command)
+    #
+    # +success_codes+ must be an Array of Integer exit codes that will
+    # be considered successful for the +command+.
+    def add(command, success_codes)
       @commands << command
+      @success_codes << success_codes
+    end
+
+    ##
+    # Commands added using this method will only be considered successful
+    # if their exit status is 0.
+    #
+    # Use #add if successful exit status codes need to be specified.
+    def <<(command)
+      add(command, [0])
     end
 
     ##
@@ -39,7 +55,7 @@ module Backup
         pipestatus = stdout.read.gsub("\n", '').split(':').sort
         pipestatus.each do |status|
           index, exitstatus = status.split('|').map(&:to_i)
-          if exitstatus > 0
+          unless @success_codes[index].include?(exitstatus)
             command = command_name(@commands[index])
             @errors << SystemCallError.new(
               "'#{ command }' returned exit code: #{ exitstatus }", exitstatus
@@ -49,8 +65,8 @@ module Backup
         @stderr = stderr.read.strip
       end
       Logger.warn(stderr_messages) if success? && stderr_messages
-    rescue Exception => e
-      raise Errors::Pipeline::ExecutionError.wrap(e)
+    rescue Exception => err
+      raise Error.wrap(err, 'Pipeline failed to execute')
     end
 
     def success?
@@ -61,12 +77,10 @@ module Backup
     # Returns a multi-line String, reporting all STDERR messages received
     # from the commands in the pipeline (if any), along with the SystemCallError
     # (Errno) message for each command which had a non-zero exit status.
-    #
-    # Each error is wrapped by Backup::Errors to provide formatting.
     def error_messages
       @error_messages ||= (stderr_messages || '') +
           "The following system errors were returned:\n" +
-          @errors.map {|err| Errors::Error.wrap(err).message }.join("\n")
+          @errors.map {|err| "#{ err.class }: #{ err.message }" }.join("\n")
     end
 
     private

@@ -2,17 +2,20 @@
 
 module Backup
   module Config
+    class Error < Backup::Error; end
+
     DEFAULTS = {
       :config_file  => 'config.rb',
       :data_path    => 'data',
-      :log_path     => 'log',
       :cache_path   => '.cache',
       :tmp_path     => '.tmp'
     }
 
     class << self
+      include Backup::Utilities::Helpers
+
       attr_reader :user, :root_path, :config_file,
-                  :data_path, :log_path, :cache_path, :tmp_path
+                  :data_path, :cache_path, :tmp_path
 
       ##
       # Setup required paths based on the given options
@@ -29,11 +32,30 @@ module Backup
       # Tries to find and load the configuration file
       def load_config!
         unless File.exist?(@config_file)
-          raise Errors::Config::NotFoundError,
-              "Could not find configuration file: '#{@config_file}'."
+          raise Error, "Could not find configuration file: '#{@config_file}'."
         end
 
         module_eval(File.read(@config_file), @config_file)
+      end
+
+      # Allows users to create preconfigured models.
+      def preconfigure(name, &block)
+        unless name.is_a?(String) && name =~ /^[A-Z]/
+          raise Error, "Preconfigured model names must be given as a string " +
+                       " and start with a capital letter."
+        end
+
+        if Backup.const_defined?(name)
+          raise Error, "'#{ name }' is already in use " +
+                        "and can not be used for a preconfigured model."
+        end
+
+        Backup.const_set(name, Class.new(Model))
+        Backup.const_get(name).preconfigure(&block)
+      end
+
+      def hostname
+        @hostname ||= run(utility(:hostname))
       end
 
       private
@@ -49,7 +71,7 @@ module Backup
 
         path = File.expand_path(path)
         unless File.directory?(path)
-          raise Errors::Config::NotFoundError, <<-EOS
+          raise Error, <<-EOS
             Root Path Not Found
             When specifying a --root-path, the path must exist.
             Path was: #{ path }
@@ -116,7 +138,8 @@ module Backup
               { 'RSync' => ['Push', 'Pull', 'Local'] }
             ],
             # Notifiers
-            ['Mail', 'Twitter', 'Campfire', 'Prowl', 'Hipchat', 'Pushover']
+            ['Mail', 'Twitter', 'Campfire', 'Prowl',
+             'Hipchat', 'Pushover', 'HttpPost', 'Nagios']
           ]
         )
       end
@@ -154,7 +177,7 @@ module Backup
   class << self
     def const_missing(const)
       if const.to_s == 'CONFIG_FILE'
-        Logger.warn Errors::ConfigError.new(<<-EOS)
+        Logger.warn Error.new(<<-EOS)
           Configuration File Upgrade Needed
           Your configuration file, located at #{ Config.config_file }
           needs to be upgraded for this version of Backup.
