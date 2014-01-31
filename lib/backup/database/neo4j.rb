@@ -116,7 +116,7 @@ module Backup
       private
 
       def lock_database
-        Logger.message(
+        Logger.info(
           "#{ @name } started locking DB at:\n" +
           "  '#{ @lock_url }'"
         )
@@ -124,7 +124,7 @@ module Backup
       end
 
       def unlock_database
-        Logger.message(
+        Logger.info(
           "#{ @name } started unlocking DB at:\n" +
           "  '#{ @unlock_url }'"
         )
@@ -161,7 +161,7 @@ module Backup
         pipeline.run
 
         if pipeline.success?
-          Logger.message(
+          Logger.info(
             "#{ @name } created snapshot at:\n" +
             "  '#{ mount_path }'"
           )
@@ -185,7 +185,7 @@ module Backup
         pipeline.run
 
         if pipeline.success?
-          Logger.message(
+          Logger.info(
             "#{ @name } removed snapshot at:\n" +
             "  '#{ mount_path }'"
           )
@@ -218,7 +218,7 @@ module Backup
 
         pipeline.run
         if pipeline.success?
-          Logger.message(
+          Logger.info(
             "#{ @name } completed compressing and packaging:\n" +
             "  '#{ outfile }'"
           )
